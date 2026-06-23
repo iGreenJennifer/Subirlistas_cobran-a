@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Processador de Listas de Cobranças</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;color:#1a1a1a;background:#f5f5f5;padding:2rem;font-size:14px}
+.container{max-width:900px;margin:0 auto}
+.header{display:flex;align-items:center;gap:14px;margin-bottom:2rem;background:#fff;border-radius:16px;padding:1.25rem 1.5rem;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.header h1{font-size:20px;font-weight:700;color:#1e3a5f}
+.header p{font-size:13px;color:#666;margin-top:2px}
+.lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2e75b6;margin-bottom:.6rem}
+.card{background:#fff;border:1px solid #e5e5e5;border-radius:14px;padding:1.5rem;margin-bottom:1.25rem;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.card.done{border-color:#2e75b6}
+.dz{border:2px dashed #d1d5db;border-radius:10px;padding:2rem 1rem;text-align:center;cursor:pointer;transition:all .15s;background:#f8fafc}
+.dz:hover,.dz.over{background:#eff6ff;border-color:#2e75b6}
+.dz h3{font-size:14px;font-weight:600;margin-bottom:3px}
+.dz p{font-size:12px;color:#888}
+#pw{display:none;margin-top:.75rem}
+#pbg{background:#e5e7eb;border-radius:4px;height:6px;overflow:hidden}
+#pb{height:6px;background:#2e75b6;width:0%;transition:width .3s;border-radius:4px}
+#pl{font-size:12px;color:#666;margin-top:5px}
+.badge{display:inline-flex;gap:6px;font-size:12px;padding:4px 12px;border-radius:20px;background:#dbeafe;color:#1e40af;font-weight:500;margin-top:.6rem}
+.files-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.file-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1rem 1.25rem;display:flex;flex-direction:column;gap:10px}
+.file-name{font-size:13px;font-weight:500}
+.file-sub{font-size:11px;color:#888;margin-top:2px}
+.file-count{font-size:11px;background:#f3f4f6;border-radius:20px;padding:2px 8px;display:inline-block;color:#666;margin-top:4px}
+.dl-btn{width:100%;padding:7px;border-radius:8px;border:1px solid #d1d5db;background:transparent;color:#111;cursor:pointer;font-size:13px}
+.dl-btn:hover{background:#f3f4f6}
+.dl-all{width:100%;padding:10px;border-radius:10px;border:1px solid #d1d5db;background:transparent;color:#111;cursor:pointer;font-size:14px;font-weight:500;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:.75rem}
+.dl-all:hover{background:#f3f4f6}
+.rst{display:block;text-align:center;font-size:12px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline;margin:.5rem auto 0}
+.log{font-size:12px;color:#666;margin-top:.5rem;font-family:monospace}
+.log-ok{color:#16a34a}.log-warn{color:#d97706}.log-err{color:#dc2626}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+  <div style="font-size:32px">📊</div>
+  <div><h1>Processador de Listas de Cobranças</h1><p>Gera automaticamente: Ajustando · 1 Boleto · Base Menor · Lista BA E PE</p></div>
+</div>
+
+<div class="lbl">Carregue o CSV de vencidos</div>
+<div class="card" id="c1">
+  <div class="dz" id="dz"
+    onclick="document.getElementById('fi').click()"
+    ondragover="event.preventDefault();event.stopPropagation();this.classList.add('over')"
+    ondragleave="this.classList.remove('over')"
+    ondrop="event.preventDefault();event.stopPropagation();this.classList.remove('over');handleFile(event.dataTransfer.files[0])">
+    <div style="font-size:30px;margin-bottom:8px">📄</div>
+    <h3>Arraste o CSV aqui</h3>
+    <p>Separado por vírgula · os 4 arquivos são gerados automaticamente</p>
+  </div>
+  <input type="file" id="fi" accept=".csv,.txt" style="display:none" onchange="handleFile(this.files[0])">
+  <div id="pw"><div id="pbg"><div id="pb"></div></div><div id="pl"></div></div>
+  <div id="logbox"></div>
+  <div id="csv-badge"></div>
+</div>
+
+<div id="result" style="display:none">
+  <div class="lbl">Arquivos gerados</div>
+  <div class="files-grid" id="file-cards"></div>
+  <div class="card" style="margin-top:.75rem">
+    <button class="dl-all" onclick="downloadAll()">⬇️ Baixar todos os arquivos</button>
+    <button class="rst" onclick="location.reload()">Processar novo arquivo</button>
+  </div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let generatedFiles=[];
+
+function pr(p,l){document.getElementById('pw').style.display='block';document.getElementById('pb').style.width=p+'%';document.getElementById('pl').textContent=l;}
+function log(m,c=''){document.getElementById('logbox').innerHTML+=`<div class="log ${c}">${m}</div>`;}
+
+function handleFile(file){
+  if(!file)return;
+  document.getElementById('logbox').innerHTML='';
+  document.getElementById('result').style.display='none';
+  document.getElementById('csv-badge').innerHTML='';
+  generatedFiles=[];
+  const r=new FileReader();
+  r.onload=e=>processCSV(e.target.result);
+  r.readAsText(file,'UTF-8');
+}
+
+function splitLine(line,sep){const c=[];let cur='',q=false;for(let i=0;i<line.length;i++){if(line[i]==='"'){q=!q;}else if(line[i]===sep&&!q){c.push(cur);cur='';}else cur+=line[i];}c.push(cur);return c;}
+function normKey(s){return s.toLowerCase().trim().replace(/[^a-z0-9_]/g,'');}
+function fmtCelular(v){if(!v)return'';return String(v).replace(/[()\-\s]/g,'');}
+function fmtCPF(v){if(!v)return'';let d=String(v).replace(/[.\-\/\s]/g,'').replace(/\D/g,'');d=d.padStart(11,'0').slice(-11);return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');}
+function parseDecimal(v){if(v===null||v===undefined||v==='')return 0;return parseFloat(String(v).replace(',','.'))||0;}
+function fmtDecimal(v){const n=typeof v==='number'?v:parseDecimal(v);return n.toFixed(2).replace('.',',');}
+function isValidDateStr(s){if(!s)return false;s=String(s).trim();return !!(s.match(/^\d{2}\/\d{2}\/\d{4}/)||s.match(/^\d{4}-\d{2}-\d{2}/));}
+function daysSince(dateStr){if(!dateStr)return null;const s=String(dateStr).trim();const m1=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);const m2=s.match(/^(\d{4})-(\d{2})-(\d{2})/);let d;if(m1)d=new Date(`${m1[3]}-${m1[2]}-${m1[1]}`);else if(m2)d=new Date(s.slice(0,10));else return null;if(isNaN(d))return null;const today=new Date();today.setHours(0,0,0,0);return Math.round((today-d)/(1000*60*60*24));}
+function deduplicateByCPF(rows){const seen=new Set();return rows.filter(r=>{const k=r['cpf_fmt']||r['cpf']||'';if(!k||seen.has(k))return false;seen.add(k);return true;});}
+function calcValorTotal(rows,allRows){const totalPorId={};for(const r of allRows){totalPorId[r['idcliente']]=(totalPorId[r['idcliente']]||0)+parseDecimal(r['valorapagar']);}return rows.map(r=>({...r,valor_total_debito:totalPorId[r['idcliente']]||parseDecimal(r['valorapagar'])}));}
+
+function buildSheet(rows){
+  const colMap=[['idcliente','ID Cliente'],['cpf_fmt','CPF'],['q_boletos','Q. Boletos'],['cliente','Cliente'],['numinstalacao','Instalação'],['dias_vencidos','Dias vencidos'],['mesreferencia','Referência'],['valor_final','Valor'],['cdatavencoriginal','cdatavencoriginal'],['uf','UF'],['concessionaria','Distribuidora'],['nvalordistribuidora','R$ Distrib'],['modalidade','Modalidade'],['email','E_mail'],['celular_fmt','Celular'],['info_adicional','Informações adicionais']];
+  const headers=colMap.map(c=>c[1]);
+  const data=[headers,...rows.map(r=>colMap.map(c=>r[c[0]]||''))];
+  return XLSX.utils.aoa_to_sheet(data);
+}
+
+function saveWb(rows,filename,label,desc){
+  const wb=XLSX.utils.book_new();
+  const ws=buildSheet(rows);
+  XLSX.utils.book_append_sheet(wb,ws,label.slice(0,31));
+  const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  generatedFiles.push({name:filename,label,desc,count:rows.length,buf});
+}
+
+function processCSV(text){
+  pr(5,'Lendo CSV...');
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2){log('❌ Arquivo vazio','log-err');return;}
+  const sep=lines[0].includes(';')?';':',';
+  const rawHeaders=lines[0].split(sep);
+  const normHeaders=rawHeaders.map(normKey);
+  log(`📋 ${rawHeaders.length} colunas · ${lines.length-1} linhas`,'log-ok');
+  pr(15,'Mapeando colunas...');
+
+  const rows=[];
+  for(let i=1;i<lines.length;i++){
+    const r={};
+    splitLine(lines[i],sep).forEach((v,j)=>{r[normHeaders[j]]=v||'';});
+    rows.push(r);
+  }
+
+  pr(25,'Preenchendo datas...');
+  let filled=0;
+  for(const r of rows){if(!isValidDateStr(r['cdatavencoriginal'])&&isValidDateStr(r['dtvencimento'])){r['cdatavencoriginal']=r['dtvencimento'];filled++;}}
+  log(`📅 ${filled} datas preenchidas`,'log-ok');
+
+  const clean=rows.filter(r=>isValidDateStr(r['cdatavencoriginal']));
+  log(`🧹 ${rows.length-clean.length} linhas removidas (data inválida)`,'log-ok');
+
+  pr(40,'Transformando colunas...');
+  for(const r of clean){
+    r['dias_vencidos']=daysSince(r['cdatavencoriginal']);
+    r['celular_fmt']=fmtCelular(r['celular']);
+    r['cpf_fmt']=fmtCPF(r['cpf']);
+    const cm=String(r['conta_unica']||'').toUpperCase().trim();
+    r['modalidade']=cm==='SIM'?'Conta_Unica':cm==='NAO'?'Conta_Separada':r['conta_unica'];
+    r['valorapagar_num']=parseDecimal(r['valorapagar']);
+    r['nvalordistribuidora']=fmtDecimal(r['nvalordistribuidora']);
+    r['info_adicional']='';
+  }
+
+  const base=clean.filter(r=>!String(r['status_financeiro']||'').trim());
+  log(`✅ ${base.length} registros na base`,'log-ok');
+
+  const qBol={};
+  for(const r of base)qBol[r['idcliente']]=(qBol[r['idcliente']]||0)+1;
+  for(const r of base)r['q_boletos']=qBol[r['idcliente']];
+
+  pr(55,'Removendo Solatio/tinyurl...');
+  const semSolatio=base.filter(r=>{const u=String(r['urlboleto']||'').toLowerCase();return!u.includes('solatio')&&!u.includes('tinyurl');});
+
+  pr(65,'Separando listas...');
+
+  // LISTA BA E PE
+  const bape=semSolatio.filter(r=>(r['uf']==='BA'||r['uf']==='PE')&&r['dias_vencidos']>=3&&r['dias_vencidos']<=45);
+  const bapeDedup=deduplicateByCPF([...bape].sort((a,b)=>b['dias_vencidos']-a['dias_vencidos']));
+  const bapeFinal=calcValorTotal(bapeDedup,semSolatio);
+  for(const r of bapeFinal)r['valor_final']=fmtDecimal(r['valor_total_debito']);
+  log(`🗺️ BA E PE: ${bapeFinal.length} clientes`,'log-ok');
+
+  const semBAPE=semSolatio.filter(r=>r['uf']!=='BA'&&r['uf']!=='PE'&&r['dias_vencidos']>=3&&r['dias_vencidos']<=30);
+
+  // 1 BOLETO
+  const umBoleto=semBAPE.filter(r=>r['q_boletos']===1);
+  for(const r of umBoleto)r['valor_final']=fmtDecimal(r['valorapagar_num']);
+  log(`📄 1 Boleto: ${umBoleto.length} registros`,'log-ok');
+
+  // BASE MENOR
+  pr(75,'Processando base menor...');
+  const maisUm=semBAPE.filter(r=>r['q_boletos']>=2);
+  const maisUmDedup=deduplicateByCPF(maisUm);
+  const baseMenorFinal=calcValorTotal(maisUmDedup,semSolatio);
+  for(const r of baseMenorFinal)r['valor_final']=fmtDecimal(r['valor_total_debito']);
+  log(`📦 Base Menor: ${baseMenorFinal.length} clientes`,'log-ok');
+
+  // AJUSTANDO
+  const ajust=semSolatio.filter(r=>r['uf']!=='BA'&&r['uf']!=='PE'&&r['dias_vencidos']>=3);
+  const ajustDedup=deduplicateByCPF([...ajust].sort((a,b)=>b['dias_vencidos']-a['dias_vencidos']));
+  for(const r of ajustDedup)r['valor_final']=fmtDecimal(r['valorapagar_num']);
+
+  pr(90,'Gerando Excel...');
+  saveWb(ajustDedup,    'Ajustando.xlsx',     'Ajustando',    'Panorama geral limpo');
+  saveWb(umBoleto,      '1_Boleto.xlsx',       '1 Boleto',     '3 a 30 dias · 1 boleto por CPF');
+  saveWb(baseMenorFinal,'Base_Menor.xlsx',     'Base Menor',   '2+ boletos · sem duplicata de CPF');
+  saveWb(bapeFinal,     'Lista_BA_PE.xlsx',    'Lista BA E PE','3 a 45 dias · BA e PE');
+
+  pr(100,'✅ Concluído!');
+  document.getElementById('c1').classList.add('done');
+  document.getElementById('csv-badge').innerHTML=`<div class="badge">✅ ${rows.length.toLocaleString('pt-BR')} linhas processadas</div>`;
+  renderCards();
+  document.getElementById('result').style.display='block';
+}
+
+function renderCards(){
+  const icons=['📋','📄','📦','🗺️'];
+  document.getElementById('file-cards').innerHTML=generatedFiles.map((f,i)=>`
+    <div class="file-card">
+      <div>
+        <div class="file-name">${icons[i]} ${f.label}</div>
+        <div class="file-sub">${f.desc}</div>
+        <span class="file-count">${f.count.toLocaleString('pt-BR')} registros</span>
+      </div>
+      <button class="dl-btn" onclick="downloadFile(${i})">⬇️ Baixar ${f.name}</button>
+    </div>`).join('');
+}
+
+function downloadFile(i){
+  const f=generatedFiles[i];
+  const blob=new Blob([f.buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=f.name;a.click();
+}
+
+function downloadAll(){generatedFiles.forEach((_,i)=>setTimeout(()=>downloadFile(i),i*400));}
+</script>
+</body>
+</html>
