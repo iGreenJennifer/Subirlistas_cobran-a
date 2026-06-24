@@ -102,7 +102,7 @@ function fmtDecimal(v){const n=typeof v==='number'?v:parseDecimal(v);return n.to
 function isValidDateStr(s){if(!s)return false;s=String(s).trim();return !!(s.match(/^\d{2}\/\d{2}\/\d{4}/)||s.match(/^\d{4}-\d{2}-\d{2}/));}
 function daysSince(dateStr){if(!dateStr)return null;const s=String(dateStr).trim();const m1=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);const m2=s.match(/^(\d{4})-(\d{2})-(\d{2})/);let d;if(m1)d=new Date(`${m1[3]}-${m1[2]}-${m1[1]}`);else if(m2)d=new Date(s.slice(0,10));else return null;if(isNaN(d))return null;const today=new Date();today.setHours(0,0,0,0);return Math.round((today-d)/(1000*60*60*24));}
 function deduplicateByCPF(rows){const seen=new Set();return rows.filter(r=>{const k=r['cpf_fmt']||r['cpf']||'';if(!k||seen.has(k))return false;seen.add(k);return true;});}
-function calcValorTotal(rows,allRows){const totalPorId={};for(const r of allRows){totalPorId[r['idcliente']]=(totalPorId[r['idcliente']]||0)+parseDecimal(r['valorapagar']);}return rows.map(r=>({...r,valor_total_debito:totalPorId[r['idcliente']]||parseDecimal(r['valorapagar'])}));}
+function calcValorTotal(rows,allRows){const totalPorId={};for(const r of allRows){totalPorId[r['cpf_fmt']]=(totalPorId[r['cpf_fmt']]||0)+parseDecimal(r['valorapagar']);}return rows.map(r=>({...r,valor_total_debito:totalPorId[r['cpf_fmt']]||parseDecimal(r['valorapagar'])}));}
 
 function buildSheet(rows){
   const colMap=[['idcliente','ID Cliente'],['cpf_fmt','CPF'],['q_boletos','Q. Boletos'],['cliente','Cliente'],['numinstalacao','Instalação'],['dias_vencidos','Dias vencidos'],['mesreferencia','Referência'],['valor_final','Valor'],['cdatavencoriginal','cdatavencoriginal'],['uf','UF'],['concessionaria','Distribuidora'],['nvalordistribuidora','R$ Distrib'],['modalidade','Modalidade'],['email','E_mail'],['celular_fmt','Celular'],['info_adicional','Informações adicionais']];
@@ -160,8 +160,8 @@ function processCSV(text){
   log(`✅ ${base.length} registros na base`,'log-ok');
 
   const qBol={};
-  for(const r of base)qBol[r['idcliente']]=(qBol[r['idcliente']]||0)+1;
-  for(const r of base)r['q_boletos']=qBol[r['idcliente']];
+  for(const r of base)qBol[r['cpf_fmt']]=(qBol[r['cpf_fmt']]||0)+1;
+  for(const r of base)r['q_boletos']=qBol[r['cpf_fmt']];
 
   pr(55,'Removendo Solatio/tinyurl...');
   const semSolatio=base.filter(r=>{const u=String(r['urlboleto']||'').toLowerCase();return!u.includes('solatio')&&!u.includes('tinyurl');});
