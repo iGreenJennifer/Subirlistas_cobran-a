@@ -99,8 +99,32 @@ function fmtCelular(v){if(!v)return'';return String(v).replace(/[()\-\s]/g,'');}
 function fmtCPF(v){if(!v)return'';let d=String(v).replace(/[.\-\/\s]/g,'').replace(/\D/g,'');d=d.padStart(11,'0').slice(-11);return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');}
 function parseDecimal(v){if(v===null||v===undefined||v==='')return 0;return parseFloat(String(v).replace(',','.'))||0;}
 function fmtDecimal(v){const n=typeof v==='number'?v:parseDecimal(v);return n.toFixed(2).replace('.',',');}
+function parseAnyDate(s){
+  if(!s) return null;
+  s=String(s).trim();
+  var m;
+  // YYYY-MM-DD → DD/MM/YYYY
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[3]+'/'+m[2]+'/'+m[1];
+  // DD/MM/YYYY
+  m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if(m) return s.slice(0,10);
+  // MM/DD/YY ou MM/DD/YYYY
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if(m){var y=parseInt(m[3]);if(y<100)y+=2000;return String(m[2]).padStart(2,'0')+'/'+String(m[1]).padStart(2,'0')+'/'+y;}
+  return null;
+}
 function isValidDateStr(s){if(!s)return false;s=String(s).trim();return !!(s.match(/^\d{2}\/\d{2}\/\d{4}/)||s.match(/^\d{4}-\d{2}-\d{2}/));}
-function daysSince(dateStr){if(!dateStr)return null;const s=String(dateStr).trim();const m1=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);const m2=s.match(/^(\d{4})-(\d{2})-(\d{2})/);let d;if(m1)d=new Date(`${m1[3]}-${m1[2]}-${m1[1]}`);else if(m2)d=new Date(s.slice(0,10));else return null;if(isNaN(d))return null;const today=new Date();today.setHours(0,0,0,0);return Math.round((today-d)/(1000*60*60*24));}
+function daysSince(dateStr){
+  var fmt=parseAnyDate(dateStr);
+  if(!fmt) return null;
+  // fmt is DD/MM/YYYY
+  var p=fmt.split('/');
+  var d=new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));
+  if(isNaN(d)) return null;
+  var today=new Date(); today.setHours(0,0,0,0);
+  return Math.round((today-d)/(1000*60*60*24));
+}
 function deduplicateByCPF(rows){const seen=new Set();return rows.filter(r=>{const k=r['cpf_fmt']||r['cpf']||'';if(!k||seen.has(k))return false;seen.add(k);return true;});}
 function calcValorTotal(rows,allRows){const totalPorId={};for(const r of allRows){totalPorId[r['cpf_fmt']]=(totalPorId[r['cpf_fmt']]||0)+parseDecimal(r['valorapagar']);}return rows.map(r=>({...r,valor_total_debito:totalPorId[r['cpf_fmt']]||parseDecimal(r['valorapagar'])}));}
 
@@ -159,39 +183,43 @@ function processCSV(text){
   const base=clean.filter(r=>!String(r['status_financeiro']||'').trim());
   log(`✅ ${base.length} registros na base`,'log-ok');
 
-  const qBol={};
-  for(const r of base)qBol[r['cpf_fmt']]=(qBol[r['cpf_fmt']]||0)+1;
-  for(const r of base)r['q_boletos']=qBol[r['cpf_fmt']];
-
-  pr(55,'Removendo Solatio/tinyurl...');
-  const semSolatio=base.filter(r=>{const u=String(r['urlboleto']||'').toLowerCase();return!u.includes('solatio')&&!u.includes('tinyurl');});
+  // Q.Boletos por CPF na BASE TODA (antes de qualquer filtro de dias)
+  const qBolTotal={};
+  for(const r of base)qBolTotal[r['cpf_fmt']]=(qBolTotal[r['cpf_fmt']]||0)+1;
+  for(const r of base)r['qbol_total']=qBolTotal[r['cpf_fmt']];
 
   pr(65,'Separando listas...');
 
-  // LISTA BA E PE
-  const bape=semSolatio.filter(r=>(r['uf']==='BA'||r['uf']==='PE')&&r['dias_vencidos']>=3&&r['dias_vencidos']<=45);
-  const bapeDedup=deduplicateByCPF([...bape].sort((a,b)=>b['dias_vencidos']-a['dias_vencidos']));
-  const bapeFinal=calcValorTotal(bapeDedup,semSolatio);
-  for(const r of bapeFinal)r['valor_final']=fmtDecimal(r['valor_total_debito']);
-  log(`🗺️ BA E PE: ${bapeFinal.length} clientes`,'log-ok');
-
-  const semBAPE=semSolatio.filter(r=>r['uf']!=='BA'&&r['uf']!=='PE'&&r['dias_vencidos']>=3&&r['dias_vencidos']<=30);
-
-  // 1 BOLETO
-  const umBoleto=semBAPE.filter(r=>r['q_boletos']===1);
+  // ── 1 BOLETO (TODOS estados, 3-30 dias, clientes puros, Q=1) ──
+  const filt1b=base.filter(r=>r['dias_vencidos']>=3&&r['dias_vencidos']<=30);
+  const qBol1b={};
+  for(const r of filt1b)qBol1b[r['cpf_fmt']]=(qBol1b[r['cpf_fmt']]||0)+1;
+  for(const r of filt1b)r['qbol_depois']=qBol1b[r['cpf_fmt']];
+  const puros1b=filt1b.filter(r=>r['qbol_total']===r['qbol_depois']);
+  const umBoleto=puros1b.filter(r=>r['qbol_depois']===1);
   for(const r of umBoleto)r['valor_final']=fmtDecimal(r['valorapagar_num']);
   log(`📄 1 Boleto: ${umBoleto.length} registros`,'log-ok');
 
-  // BASE MENOR
+  // ── BASE MENOR (TODOS estados, 3-30 dias, clientes puros, Q>=2, dedup CPF) ──
   pr(75,'Processando base menor...');
-  const maisUm=semBAPE.filter(r=>r['q_boletos']>=2);
-  const maisUmDedup=deduplicateByCPF(maisUm);
-  const baseMenorFinal=calcValorTotal(maisUmDedup,semSolatio);
+  const maisUm=puros1b.filter(r=>r['qbol_depois']>=2);
+  const maisUmDedup=deduplicateByCPF([...maisUm].sort((a,b)=>b['dias_vencidos']-a['dias_vencidos']));
+  const baseMenorFinal=calcValorTotal(maisUmDedup,base);
   for(const r of baseMenorFinal)r['valor_final']=fmtDecimal(r['valor_total_debito']);
-  log(`📦 Base Menor: ${baseMenorFinal.length} clientes`,'log-ok');
+  log(`📦 Base Menor: ${baseMenorFinal.length} clientes únicos`,'log-ok');
 
-  // AJUSTANDO
-  const ajust=semSolatio.filter(r=>r['uf']!=='BA'&&r['uf']!=='PE'&&r['dias_vencidos']>=3);
+  // ── LISTA BA E PE (só BA/PE, 3-45 dias, clientes puros, dedup CPF) ──
+  const filtBape=base.filter(r=>r['dias_vencidos']>=3&&r['dias_vencidos']<=45&&(r['uf']==='BA'||r['uf']==='PE'));
+  const qBolBape={};
+  for(const r of filtBape)qBolBape[r['cpf_fmt']]=(qBolBape[r['cpf_fmt']]||0)+1;
+  for(const r of filtBape)r['qbol_bape']=qBolBape[r['cpf_fmt']];
+  const purosBape=filtBape.filter(r=>r['qbol_total']===r['qbol_bape']);
+  const bapeFinal=calcValorTotal(deduplicateByCPF([...purosBape].sort((a,b)=>b['dias_vencidos']-a['dias_vencidos'])),base);
+  for(const r of bapeFinal)r['valor_final']=fmtDecimal(r['valor_total_debito']);
+  log(`🗺️ BA E PE: ${bapeFinal.length} clientes`,'log-ok');
+
+  // ── AJUSTANDO (todos estados, dias >= 3, dedup CPF) ──
+  const ajust=base.filter(r=>r['dias_vencidos']>=3);
   const ajustDedup=deduplicateByCPF([...ajust].sort((a,b)=>b['dias_vencidos']-a['dias_vencidos']));
   for(const r of ajustDedup)r['valor_final']=fmtDecimal(r['valorapagar_num']);
 
