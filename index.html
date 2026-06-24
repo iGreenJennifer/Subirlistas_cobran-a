@@ -182,10 +182,15 @@ function saveWb(rows,filename,label,desc){
 
 function processCSV(text){
   pr(5,'Lendo CSV...');
+  // Remove BOM se existir
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
   const lines=text.split(/\r?\n/).filter(l=>l.trim());
   if(lines.length<2){log('❌ Arquivo vazio','log-err');return;}
-  const sep=lines[0].includes(';')?';':',';
-  const rawHeaders=lines[0].split(sep);
+  // Detectar separador corretamente
+  const sepCounts={';':0,',':0};
+  for(var ci=0;ci<lines[0].length;ci++){if(sepCounts[lines[0][ci]]!==undefined)sepCounts[lines[0][ci]]++;}
+  const sep=sepCounts[';']>=sepCounts[',']?';':',';
+  const rawHeaders=lines[0].split(sep).map(h=>h.replace(/^\uFEFF/,''));
   const normHeaders=rawHeaders.map(normKey);
   log(`📋 ${rawHeaders.length} colunas · ${lines.length-1} linhas`,'log-ok');
   pr(15,'Mapeando colunas...');
