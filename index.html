@@ -6,6 +6,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 
+
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;color:#1a1a1a;background:#f5f5f5;padding:2rem;font-size:14px}
 .container{max-width:900px;margin:0 auto}
@@ -63,6 +64,7 @@ body{font-family:system-ui,sans-serif;color:#1a1a1a;background:#f5f5f5;padding:2
 .badge-small{display:inline-flex;font-size:11px;padding:3px 10px;border-radius:20px;background:#dbeafe;color:#1e40af;font-weight:500;margin-top:.5rem}
 .badge-ok{background:#d1fae5;color:#065f46}
 .badge-err{background:#fee2e2;color:#991b1b}
+
 </style>
 </head>
 <body>
@@ -70,16 +72,19 @@ body{font-family:system-ui,sans-serif;color:#1a1a1a;background:#f5f5f5;padding:2
   Jennifer Silveira · <a href="mailto:jennifer.silveira@igreenenergy.com.br" style="color:#9ca3af;text-decoration:none">jennifer.silveira@igreenenergy.com.br</a> · 2026
 </div>
 
-<!-- ABAS -->
 <div class="container">
+
+<!-- ABAS -->
 <div class="tabs">
   <button class="tab active" onclick="switchTab('processador',this)">📊 Processador de Listas</button>
   <button class="tab" onclick="switchTab('filtros',this)">🔧 Filtros (Pagos + Ligações)</button>
 </div>
 
+<!-- ═══════════════════════════════════════════════════ -->
 <!-- ABA 1: PROCESSADOR -->
+<!-- ═══════════════════════════════════════════════════ -->
 <div id="tab-processador" class="tab-panel active">
-<div class="container">
+
 <div class="header">
   <div style="font-size:32px">📊</div>
   <div><h1>Processador de Listas de Cobranças</h1><p>Gera automaticamente: Ajustando · 1 Boleto · Base Menor · Lista BA E PE</p></div>
@@ -94,7 +99,7 @@ body{font-family:system-ui,sans-serif;color:#1a1a1a;background:#f5f5f5;padding:2
     ondrop="event.preventDefault();event.stopPropagation();this.classList.remove('over');handleFile(event.dataTransfer.files[0])">
     <div style="font-size:30px;margin-bottom:8px">📄</div>
     <h3>Arraste o CSV aqui</h3>
-    <p>Separado por vírgula · os 4 arquivos são gerados automaticamente</p>
+    <p>Separado por vírgula ou ponto e vírgula · aceita qualquer formato de data</p>
   </div>
   <input type="file" id="fi" accept=".csv,.txt" style="display:none" onchange="handleFile(this.files[0])">
   <div id="pw"><div id="pbg"><div id="pb"></div></div><div id="pl"></div></div>
@@ -110,10 +115,104 @@ body{font-family:system-ui,sans-serif;color:#1a1a1a;background:#f5f5f5;padding:2
     <button class="rst" onclick="resetAll()">Processar novo arquivo</button>
   </div>
 </div>
+
+</div><!-- fim tab-processador -->
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- ABA 2: FILTROS -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div id="tab-filtros" class="tab-panel">
+
+<div class="header">
+  <div style="font-size:32px">🔧</div>
+  <div>
+    <h1>Filtros de Lista</h1>
+    <p>Annexe a lista já pronta e remova pagos e clientes já contatados</p>
+  </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- 1. Lista já pronta -->
+<div class="lbl">1 · Sua lista Excel já pronta</div>
+<div class="card" id="f-card-lista">
+  <div class="dz" id="f-dz-lista"
+    onclick="document.getElementById('f-fi-lista').click()"
+    ondragover="event.preventDefault();event.stopPropagation();this.classList.add('over')"
+    ondragleave="this.classList.remove('over')"
+    ondrop="event.preventDefault();event.stopPropagation();this.classList.remove('over');fLoadLista(event.dataTransfer.files[0])">
+    <div style="font-size:28px;margin-bottom:8px">📋</div>
+    <h3>Arraste a lista Excel aqui</h3>
+    <p>Excel ou CSV · a lista que você já tem pronta</p>
+  </div>
+  <input type="file" id="f-fi-lista" accept=".xlsx,.xls,.csv" style="display:none" onchange="fLoadLista(this.files[0])">
+  <div id="f-badge-lista"></div>
+</div>
+
+<!-- 2. Pagos -->
+<div class="lbl">2 · Remover pagos <span style="font-weight:400;color:#9ca3af">(opcional)</span></div>
+<div class="filter-card" id="f-card-pagos">
+  <div class="filter-header">
+    <span class="filter-icon">💰</span>
+    <div><div class="filter-title">Lista de pagos</div><div class="filter-sub">Excel ou CSV com CPFs dos clientes que já pagaram</div></div>
+  </div>
+  <div class="dz" id="f-dz-pagos"
+    onclick="document.getElementById('f-fi-pagos').click()"
+    ondragover="event.preventDefault();event.stopPropagation();this.classList.add('over')"
+    ondragleave="this.classList.remove('over')"
+    ondrop="event.preventDefault();event.stopPropagation();this.classList.remove('over');fLoadPagos(event.dataTransfer.files[0])">
+    <div style="font-size:22px;margin-bottom:6px">📊</div>
+    <h3>Arraste o arquivo de pagos</h3>
+    <p>Excel ou CSV · comparação por CPF</p>
+  </div>
+  <input type="file" id="f-fi-pagos" accept=".xlsx,.xls,.csv" style="display:none" onchange="fLoadPagos(this.files[0])">
+  <div id="f-badge-pagos"></div>
+</div>
+
+<!-- 3. Ligações -->
+<div class="lbl">3 · Remover clientes das ligações (3C+) <span style="font-weight:400;color:#9ca3af">(opcional)</span></div>
+<div class="filter-card" id="f-card-lig">
+  <div class="filter-header">
+    <span class="filter-icon">📞</span>
+    <div>
+      <div class="filter-title">CSV de ligações do 3C+</div>
+      <div class="filter-sub">4 datas · 1ª–3ª remove Promessa/2ª via · 4ª remove todos</div>
+    </div>
+  </div>
+  <div class="dz" id="f-dz-lig"
+    onclick="document.getElementById('f-fi-lig').click()"
+    ondragover="event.preventDefault();event.stopPropagation();this.classList.add('over')"
+    ondragleave="this.classList.remove('over')"
+    ondrop="event.preventDefault();event.stopPropagation();this.classList.remove('over');fLoadLig(event.dataTransfer.files[0])">
+    <div style="font-size:22px;margin-bottom:6px">📄</div>
+    <h3>Arraste o CSV de ligações</h3>
+    <p>Coluna identifier = CPF · call_date = data da ligação</p>
+  </div>
+  <input type="file" id="f-fi-lig" accept=".csv,.txt" style="display:none" onchange="fLoadLig(this.files[0])">
+  <div id="f-badge-lig"></div>
+</div>
+
+<!-- 4. Gerar -->
+<div class="lbl">4 · Aplicar filtros</div>
+<div class="card">
+  <button class="dl-all" id="f-btn-gerar" onclick="fGerar()" disabled>🔧 Aplicar filtros e baixar lista limpa</button>
+  <button class="rst" onclick="fReset()" style="display:block;text-align:center;font-size:12px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline;margin:.5rem auto 0">Limpar tudo</button>
+</div>
+
+<div id="f-result" style="display:none">
+  <div class="card">
+    <div class="stats" id="f-stats"></div>
+  </div>
+</div>
+
+</div><!-- fim tab-filtros -->
+
+</div><!-- fim container -->
+
+<div style="text-align:center;padding:.75rem 0 .5rem;font-size:11px;color:#9ca3af;font-family:system-ui,sans-serif;margin-top:1rem;border-top:1px solid #f0f0f0">
+  © 2026 Jennifer Silveira · <a href="mailto:jennifer.silveira@igreenenergy.com.br" style="color:#9ca3af;text-decoration:none">jennifer.silveira@igreenenergy.com.br</a>
+</div>
+
 <script>
+
 let generatedFiles=[];
 
 function pr(p,l){document.getElementById('pw').style.display='block';document.getElementById('pb').style.width=p+'%';document.getElementById('pl').textContent=l;}
@@ -126,7 +225,12 @@ function handleFile(file){
   document.getElementById('csv-badge').innerHTML='';
   generatedFiles=[];
   const r=new FileReader();
-  r.onload=e=>processCSV(e.target.result);
+  r.onload=function(e){
+    var text=e.target.result;
+    // Remove BOM UTF-8 se existir
+    if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
+    processCSV(text);
+  };
   r.readAsText(file,'UTF-8');
 }
 
@@ -525,6 +629,7 @@ function fReset(){
   document.getElementById('f-fi-pagos').value='';
   document.getElementById('f-fi-lig').value='';
 }
+
 </script>
 </body>
 </html>
