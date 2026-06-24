@@ -5,6 +5,7 @@
 <title>Processador de Listas de Cobranças</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
+
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;color:#1a1a1a;background:#f5f5f5;padding:2rem;font-size:14px}
 .container{max-width:900px;margin:0 auto}
@@ -35,6 +36,33 @@ body{font-family:system-ui,sans-serif;color:#1a1a1a;background:#f5f5f5;padding:2
 .rst{display:block;text-align:center;font-size:12px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline;margin:.5rem auto 0}
 .log{font-size:12px;color:#666;margin-top:.5rem;font-family:monospace}
 .log-ok{color:#16a34a}.log-warn{color:#d97706}.log-err{color:#dc2626}
+
+
+/* ABAS */
+.tabs{display:flex;gap:4px;margin-bottom:1.5rem;background:#e5e7eb;border-radius:12px;padding:4px}
+.tab{flex:1;padding:10px;border:none;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;background:transparent;color:#6b7280;transition:all .15s}
+.tab.active{background:#fff;color:#1e3a5f;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* Filtros aba */
+.filter-section{margin-bottom:1.25rem}
+.filter-card{background:#fff;border:1.5px dashed #d1d5db;border-radius:16px;padding:1.25rem 1.5rem;margin-bottom:1rem}
+.filter-card.loaded{border-color:#16a34a;border-style:solid}
+.filter-header{display:flex;align-items:center;gap:10px;margin-bottom:.75rem}
+.filter-icon{font-size:24px}
+.filter-title{font-size:14px;font-weight:600}
+.filter-sub{font-size:12px;color:#888;margin-top:2px}
+.result-lista{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:.75rem 1rem;margin-top:.75rem;font-size:13px}
+.result-lista .n{font-size:20px;font-weight:700;color:#16a34a}
+.result-lista .l{font-size:11px;color:#666;margin-top:2px}
+.result-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:.75rem}
+.dl-green{padding:9px;border-radius:10px;background:#16a34a;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;width:100%;display:flex;align-items:center;justify-content:center;gap:6px}
+.dl-green:hover{background:#15803d}
+.dl-green:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+.badge-small{display:inline-flex;font-size:11px;padding:3px 10px;border-radius:20px;background:#dbeafe;color:#1e40af;font-weight:500;margin-top:.5rem}
+.badge-ok{background:#d1fae5;color:#065f46}
+.badge-err{background:#fee2e2;color:#991b1b}
 </style>
 </head>
 <body>
@@ -42,6 +70,15 @@ body{font-family:system-ui,sans-serif;color:#1a1a1a;background:#f5f5f5;padding:2
   Jennifer Silveira · <a href="mailto:jennifer.silveira@igreenenergy.com.br" style="color:#9ca3af;text-decoration:none">jennifer.silveira@igreenenergy.com.br</a> · 2026
 </div>
 
+<!-- ABAS -->
+<div class="container">
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('processador',this)">📊 Processador de Listas</button>
+  <button class="tab" onclick="switchTab('filtros',this)">🔧 Filtros (Pagos + Ligações)</button>
+</div>
+
+<!-- ABA 1: PROCESSADOR -->
+<div id="tab-processador" class="tab-panel active">
 <div class="container">
 <div class="header">
   <div style="font-size:32px">📊</div>
@@ -70,7 +107,7 @@ body{font-family:system-ui,sans-serif;color:#1a1a1a;background:#f5f5f5;padding:2
   <div class="files-grid" id="file-cards"></div>
   <div class="card" style="margin-top:.75rem">
     <button class="dl-all" onclick="downloadAll()">⬇️ Baixar todos os arquivos</button>
-    <button class="rst" onclick="location.reload()">Processar novo arquivo</button>
+    <button class="rst" onclick="resetAll()">Processar novo arquivo</button>
   </div>
 </div>
 </div>
@@ -114,7 +151,7 @@ function parseAnyDate(s){
   if(m){var y=parseInt(m[3]);if(y<100)y+=2000;return String(m[2]).padStart(2,'0')+'/'+String(m[1]).padStart(2,'0')+'/'+y;}
   return null;
 }
-function isValidDateStr(s){if(!s)return false;s=String(s).trim();return !!(s.match(/^\d{2}\/\d{2}\/\d{4}/)||s.match(/^\d{4}-\d{2}-\d{2}/));}
+function isValidDateStr(s){return parseAnyDate(s)!==null;}
 function daysSince(dateStr){
   var fmt=parseAnyDate(dateStr);
   if(!fmt) return null;
@@ -160,12 +197,19 @@ function processCSV(text){
     rows.push(r);
   }
 
-  pr(25,'Preenchendo datas...');
-  let filled=0;
-  for(const r of rows){if(!isValidDateStr(r['cdatavencoriginal'])&&isValidDateStr(r['dtvencimento'])){r['cdatavencoriginal']=r['dtvencimento'];filled++;}}
+  pr(25,'Preenchendo e convertendo datas...');
+  // Converter todas as datas para DD/MM/YYYY primeiro
+  for(const r of rows){
+    var cdaFmt=parseAnyDate(r['cdatavencoriginal']);
+    var dtvFmt=parseAnyDate(r['dtvencimento']);
+    if(cdaFmt) r['cdatavencoriginal']=cdaFmt;
+    else if(dtvFmt){ r['cdatavencoriginal']=dtvFmt; }
+    if(dtvFmt) r['dtvencimento']=dtvFmt;
+  }
+  let filled=rows.filter(r=>!parseAnyDate(r['cdatavencoriginal'])&&parseAnyDate(r['dtvencimento'])).length;
   log(`📅 ${filled} datas preenchidas`,'log-ok');
 
-  const clean=rows.filter(r=>isValidDateStr(r['cdatavencoriginal']));
+  const clean=rows.filter(r=>parseAnyDate(r['cdatavencoriginal'])!==null);
   log(`🧹 ${rows.length-clean.length} linhas removidas (data inválida)`,'log-ok');
 
   pr(40,'Transformando colunas...');
@@ -224,10 +268,16 @@ function processCSV(text){
   for(const r of ajustDedup)r['valor_final']=fmtDecimal(r['valorapagar_num']);
 
   pr(90,'Gerando Excel...');
-  saveWb(ajustDedup,    'Ajustando.xlsx',     'Ajustando',    'Panorama geral limpo');
-  saveWb(umBoleto,      '1_Boleto.xlsx',       '1 Boleto',     '3 a 30 dias · 1 boleto por CPF');
-  saveWb(baseMenorFinal,'Base_Menor.xlsx',     'Base Menor',   '2+ boletos · sem duplicata de CPF');
-  saveWb(bapeFinal,     'Lista_BA_PE.xlsx',    'Lista BA E PE','3 a 45 dias · BA e PE');
+  // Aplicar filtros opcionais
+  const ajustFinal=applyOptionalFilters([...ajustDedup]);
+  const umBoletoFinal=applyOptionalFilters([...umBoleto]);
+  const baseMenorFiltrada=applyOptionalFilters([...baseMenorFinal]);
+  const bapeFiltrada=applyOptionalFilters([...bapeFinal]);
+
+  saveWb(ajustFinal,       'Ajustando.xlsx',     'Ajustando',    'Panorama geral limpo');
+  saveWb(umBoletoFinal,    '1_Boleto.xlsx',       '1 Boleto',     '3 a 30 dias · 1 boleto por CPF');
+  saveWb(baseMenorFiltrada,'Base_Menor.xlsx',     'Base Menor',   '2+ boletos · sem duplicata de CPF');
+  saveWb(bapeFiltrada,     'Lista_BA_PE.xlsx',    'Lista BA E PE','3 a 45 dias · BA e PE');
 
   pr(100,'✅ Concluído!');
   document.getElementById('c1').classList.add('done');
@@ -256,10 +306,220 @@ function downloadFile(i){
 }
 
 function downloadAll(){generatedFiles.forEach((_,i)=>setTimeout(()=>downloadFile(i),i*400));}
-</script>
+function resetAll(){
+  generatedFiles=[];
+  var el;
+  el=document.getElementById('logbox'); if(el) el.innerHTML='';
+  el=document.getElementById('result'); if(el) el.style.display='none';
+  el=document.getElementById('pw'); if(el) el.style.display='none';
+  el=document.getElementById('csv-badge'); if(el) el.innerHTML='';
+  el=document.getElementById('c1'); if(el) el.classList.remove('done');
+  el=document.getElementById('fi'); if(el) el.value='';
+}
 
-<div style="text-align:center;padding:.75rem 0 .5rem;font-size:11px;color:#9ca3af;font-family:system-ui,sans-serif;margin-top:1rem;border-top:1px solid #f0f0f0">
-  © 2026 Jennifer Silveira · <a href="mailto:jennifer.silveira@igreenenergy.com.br" style="color:#9ca3af;text-decoration:none">jennifer.silveira@igreenenergy.com.br</a>
-</div>
+
+// ── ABAS ──────────────────────────────────────────────
+function switchTab(name, btn){
+  document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── ABA FILTROS ────────────────────────────────────────
+var fListaRows=[], fListaHeaders=[], fPagosCPFs=new Set(), fLigCPFs=new Set(), fListaReady=false;
+
+function fNormKey(s){return String(s||'').toLowerCase().trim().replace(/[^a-z0-9_]/g,'');}
+function fFmtCPF(v){
+  var d=String(v||'').replace(/[.\-\/\s]/g,'').replace(/\D/g,'').padStart(11,'0').slice(-11);
+  return d.length===11?d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6,9)+'-'+d.slice(9):String(v||'');
+}
+
+function fLoadLista(file){
+  if(!file)return;
+  document.getElementById('f-badge-lista').innerHTML='<div class="badge-small">⏳ Lendo...</div>';
+  var ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='xlsx'||ext==='xls'){
+    var r=new FileReader();
+    r.onload=function(e){
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      fListaHeaders=data[0].map(function(h){return String(h||'');});
+      fListaRows=data.slice(1).filter(function(r){return r.some(function(c){return c!=='';});});
+      fListaReady=true;
+      fCheckReady();
+      document.getElementById('f-card-lista').classList.add('done');
+      document.getElementById('f-badge-lista').innerHTML='<div class="badge-small badge-ok">✅ '+fListaRows.length.toLocaleString('pt-BR')+' linhas carregadas · '+fListaHeaders.length+' colunas</div>';
+    };
+    r.readAsArrayBuffer(file);
+  } else {
+    var r=new FileReader();
+    r.onload=function(e){
+      var text=e.target.result;
+      if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
+      var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});
+      var sep=lines[0].includes(';')?';':',';
+      fListaHeaders=lines[0].split(sep).map(function(h){return h.trim().replace(/^"|"$/g,'');});
+      fListaRows=lines.slice(1).map(function(l){return l.split(sep).map(function(c){return c.trim().replace(/^"|"$/g,'');});});
+      fListaRows=fListaRows.filter(function(r){return r.some(function(c){return c!=='';});});
+      fListaReady=true;
+      fCheckReady();
+      document.getElementById('f-card-lista').classList.add('done');
+      document.getElementById('f-badge-lista').innerHTML='<div class="badge-small badge-ok">✅ '+fListaRows.length.toLocaleString('pt-BR')+' linhas carregadas</div>';
+    };
+    r.readAsText(file,'UTF-8');
+  }
+}
+
+function fLoadPagos(file){
+  if(!file)return;
+  document.getElementById('f-badge-pagos').innerHTML='<div class="badge-small">⏳ Lendo...</div>';
+  var ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='xlsx'||ext==='xls'){
+    var r=new FileReader();
+    r.onload=function(e){
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      var hdr=data[0].map(function(h){return fNormKey(String(h||''));});
+      var iCPF=hdr.findIndex(function(h){return h.includes('cpf');});
+      if(iCPF<0)iCPF=0;
+      fPagosCPFs=new Set();
+      for(var i=1;i<data.length;i++){
+        if(data[i][iCPF])fPagosCPFs.add(fFmtCPF(String(data[i][iCPF])));
+      }
+      document.getElementById('f-card-pagos').classList.add('loaded');
+      document.getElementById('f-badge-pagos').innerHTML='<div class="badge-small badge-ok">✅ '+fPagosCPFs.size.toLocaleString('pt-BR')+' CPFs de pagos</div>';
+    };
+    r.readAsArrayBuffer(file);
+  } else {
+    var r=new FileReader();
+    r.onload=function(e){
+      var text=e.target.result;
+      if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
+      var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});
+      var sep=lines[0].includes(';')?';':',';
+      var hdr=lines[0].split(sep).map(fNormKey);
+      var iCPF=hdr.findIndex(function(h){return h.includes('cpf');});
+      if(iCPF<0)iCPF=0;
+      fPagosCPFs=new Set();
+      for(var i=1;i<lines.length;i++){
+        var row=lines[i].split(sep);
+        if(row[iCPF])fPagosCPFs.add(fFmtCPF(row[iCPF].trim()));
+      }
+      document.getElementById('f-card-pagos').classList.add('loaded');
+      document.getElementById('f-badge-pagos').innerHTML='<div class="badge-small badge-ok">✅ '+fPagosCPFs.size.toLocaleString('pt-BR')+' CPFs de pagos</div>';
+    };
+    r.readAsText(file,'UTF-8');
+  }
+}
+
+function fLoadLig(file){
+  if(!file)return;
+  document.getElementById('f-badge-lig').innerHTML='<div class="badge-small">⏳ Lendo...</div>';
+  var r=new FileReader();
+  r.onload=function(e){
+    var text=e.target.result;
+    if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
+    var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});
+    var sep=lines[0].includes(';')?';':',';
+    var hdr=lines[0].split(sep).map(fNormKey);
+    var iId=hdr.findIndex(function(h){return h==='identifier';});
+    var iQual=hdr.findIndex(function(h){return h.includes('qualificationname');});
+    var iDate=hdr.findIndex(function(h){return h.includes('calldate');});
+    if(iId<0||iQual<0||iDate<0){
+      document.getElementById('f-badge-lig').innerHTML='<div class="badge-small badge-err">❌ Colunas não encontradas (identifier, qualification_name, call_date)</div>';
+      return;
+    }
+    var datasSet=new Set();
+    var rowsLig=[];
+    for(var i=1;i<lines.length;i++){
+      var row=lines[i].split(sep);
+      if(row.length<Math.max(iId,iQual,iDate)+1)continue;
+      var dt=(row[iDate]||'').trim().slice(0,10);
+      if(dt)datasSet.add(dt);
+      rowsLig.push({cpf:fFmtCPF((row[iId]||'').trim()),qual:(row[iQual]||'').trim(),date:dt});
+    }
+    var datas=Array.from(datasSet).sort();
+    if(datas.length<1){
+      document.getElementById('f-badge-lig').innerHTML='<div class="badge-small badge-err">❌ Nenhuma data encontrada</div>';
+      return;
+    }
+    var ultimaData=datas[datas.length-1];
+    var datasAnt=datas.slice(0,-1);
+    fLigCPFs=new Set();
+    rowsLig.forEach(function(r){
+      if(!r.cpf)return;
+      if(r.date===ultimaData){
+        fLigCPFs.add(r.cpf);
+      } else if(datasAnt.indexOf(r.date)>=0){
+        var q=r.qual;
+        if(q==='Promessa de Pagamento'||(/solicitou/i.test(q)&&/2/.test(q)&&/via/i.test(q))){
+          fLigCPFs.add(r.cpf);
+        }
+      }
+    });
+    document.getElementById('f-card-lig').classList.add('loaded');
+    document.getElementById('f-badge-lig').innerHTML='<div class="badge-small badge-ok">✅ '+fLigCPFs.size.toLocaleString('pt-BR')+' CPFs para remover · '+datas.length+' datas (última: '+ultimaData+')</div>';
+  };
+  r.readAsText(file,'UTF-8');
+}
+
+function fCheckReady(){
+  document.getElementById('f-btn-gerar').disabled=!fListaReady;
+}
+
+function fGerar(){
+  if(!fListaReady)return;
+
+  // Find CPF column in lista
+  var iCPF=fListaHeaders.findIndex(function(h){return fNormKey(h).includes('cpf');});
+  if(iCPF<0){alert('Coluna CPF não encontrada na lista!');return;}
+
+  var antes=fListaRows.length;
+  var removPagos=0, removLig=0;
+
+  var rows=fListaRows.filter(function(r){
+    var cpf=fFmtCPF(String(r[iCPF]||''));
+    if(fPagosCPFs.size>0&&fPagosCPFs.has(cpf)){removPagos++;return false;}
+    if(fLigCPFs.size>0&&fLigCPFs.has(cpf)){removLig++;return false;}
+    return true;
+  });
+
+  // Show stats
+  document.getElementById('f-stats').innerHTML=
+    '<div class="stat"><div class="n">'+antes.toLocaleString('pt-BR')+'</div><div class="l">Lista original</div></div>'+
+    '<div class="stat"><div class="n">'+removPagos.toLocaleString('pt-BR')+'</div><div class="l">Removidos (pagos)</div></div>'+
+    '<div class="stat"><div class="n">'+removLig.toLocaleString('pt-BR')+'</div><div class="l">Removidos (ligações)</div></div>'+
+    '<div class="stat hi"><div class="n">'+rows.length.toLocaleString('pt-BR')+'</div><div class="l">Lista final</div></div>';
+  document.getElementById('f-result').style.display='block';
+
+  // Generate Excel
+  var wb=XLSX.utils.book_new();
+  var ws=XLSX.utils.aoa_to_sheet([fListaHeaders].concat(rows));
+  XLSX.utils.book_append_sheet(wb,ws,'Lista Filtrada');
+  var buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download='Lista_Filtrada.xlsx';
+  a.click();
+}
+
+function fReset(){
+  fListaRows=[];fListaHeaders=[];fPagosCPFs=new Set();fLigCPFs=new Set();fListaReady=false;
+  document.getElementById('f-badge-lista').innerHTML='';
+  document.getElementById('f-badge-pagos').innerHTML='';
+  document.getElementById('f-badge-lig').innerHTML='';
+  document.getElementById('f-card-lista').classList.remove('done');
+  document.getElementById('f-card-pagos').classList.remove('loaded');
+  document.getElementById('f-card-lig').classList.remove('loaded');
+  document.getElementById('f-result').style.display='none';
+  document.getElementById('f-btn-gerar').disabled=true;
+  document.getElementById('f-fi-lista').value='';
+  document.getElementById('f-fi-pagos').value='';
+  document.getElementById('f-fi-lig').value='';
+}
+</script>
 </body>
 </html>
